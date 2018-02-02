@@ -1,0 +1,97 @@
+package main.scala.sparksqlworkouts
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.functions.get_json_object
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.functions.explode
+import org.apache.spark.sql.functions.array
+import org.apache.spark.rdd.JdbcRDD
+import java.sql.{Connection, DriverManager, ResultSet}
+import java.util.Properties
+import org.apache.spark.SparkContext
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql._
+import org.apache.spark.sql.functions.explode
+import org.apache.spark.sql.SparkSession
+
+
+
+
+
+object basic1 {
+ 
+  case class schema(budget:Int,id:Int,over:String)
+ 
+  def main(args:Array[String])
+  {
+    val conf = new SparkConf().setAppName("hive-insert").setMaster("local")
+       val sc = new SparkContext(conf)
+       sc.setLogLevel("ERROR")
+      
+       val spark = SparkSession
+      .builder()
+      //.config("spark.sql.warehouse.dir", warehouseLocation)
+      .enableHiveSupport()
+      .getOrCreate()
+      import spark.implicits._
+      import spark.sql
+     
+      val data=spark.read.option("header","true").option("delimiter",",").option("escape","\"").option("inferschema","true").csv("file:///home/hduser/Downloads/tmdb_5000_movies.csv")
+     
+      data.createOrReplaceTempView("movies_raw")
+     
+      println("actual data")
+      sql("select * from movies_raw").show()
+    
+    
+     
+     /* val data1=data.rdd.map(x=>"{\"budget\":"+ x.getAs[Integer](0)+",\"genres\":"+ x.getAs[String](1)+",\"homepage\":"+"\""+x.getAs[String](2)+"\""+",\"movie_id\":"+x.getAs[Integer](3)+",\"keywords\":"+ x.getAs[String](4)+",\"original_language\":"+"\""+x.getAs[String](5)+"\""+",\"original_title\":"+"\""+x.getAs[String](6)+"\""+",\"overview\":"+"\""+x.getAs[String](7)+"\""+",\"popularity\":"+"\""+x.getAs[String](8)+"\""+",\"production_companies\":"+x.getAs[String](9)+",\"production_countries\":"+x.getAs[String](10)+",\"release_date\":"+"\""+x.getAs[String](11)+"\""+",\"revenue\":"+x.getAs[String](12)+",\"runtime\":"+x.getAs[String](13)+",\"spoken_languages\":"+x.getAs[String](14)+",\"status\":" +"\""+x.getAs[String](15)+"\""+",\"tagline\":"+"\""+ x.getAs[String](16)+"\""+",\"title\":" +"\""+ x.getAs[String](17)+"\""+",\"vote_average\":" + x.getAs[String](18)+",\"vote_count\":" + x.getAs[Integer](19)+"}")
+     
+
+         
+      val data2=spark.read.json(data1)
+     
+     
+
+      val data12=data2.withColumn("id",explode($"genres.id")).withColumn("name",explode($"genres.name")).select($"movie_id",$"genres.id",$"genres.name").distinct().withColumn("id",explode($"id")).withColumn("name",explode($"name")).distinct()
+      data12.createOrReplaceTempView("movie_genre")
+      println
+      println("Movie_genre table data")
+      println
+      sql("select * from movie_genre").show(false)
+     
+           
+      val data13=data2.withColumn("id",explode($"production_companies.id")).withColumn("name",explode($"production_companies.name")).select($"movie_id",$"production_companies.id",$"production_companies.name").distinct().withColumn("id",explode($"id")).withColumn("name",explode($"name")).distinct()
+     
+      println
+      println("Movie_production table data")
+      println
+     
+      data13.createOrReplaceTempView("movie_production")
+      sql("select * from movie_production").show(false) */
+      sql("drop table movie_release")
+      val data14=sql("create table movie_release as select month(release_date) as Month from movies_raw")
+     
+      sql("select Month,count(Month) as Movie_Release_count from movie_release group by Month order by Month").show()
+      //val data15=data.select($"release_date").show()
+     
+
+     
+     
+            
+     
+  }
+ 
+}
