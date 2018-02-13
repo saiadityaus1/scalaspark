@@ -1,0 +1,104 @@
+package poc.test.spark
+
+import org.apache.spark.SparkConf
+import  org.apache.spark.SparkContext
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.streaming.{Seconds, StreamingContext}
+import StreamingContext._
+//import org.json4s.native.JsonFormats.parse
+import java.util.Properties
+import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.apache.kafka.common.serialization.StringDeserializer
+import org.apache.spark.streaming.kafka010._
+import org.apache.spark.streaming.kafka010.LocationStrategies.PreferConsistent
+import org.apache.spark.streaming.kafka010.ConsumerStrategies.Subscribe
+import com.datastax.spark.connector._
+//import com.datastax.bdp.spark.writer.BulkTableWriter._
+import com.datastax.spark.connector._
+import com.datastax.spark.connector.streaming._
+import org.apache.spark.streaming.dstream.ConstantInputDStream
+import org.apache.spark.sql.functions.explode
+import org.apache.spark.sql.Row
+import org.apache.spark.sql
+
+
+object iotstream {  
+  case class dthrealtime(assetID:String,gw_SNO:String,TS: String,name: String,value: String,sts: String)
+  case class dthgeo(assetID:String,gw_SNO:String,TS:String,name:String,Latitude: String,Longitude: String,altitude: String,direction: String,speed: String,visiblesatellites: String,pdop: String,hdop: String,updatereason: String,geofenceid: String,sts:String)
+  def main(args:Array[String])
+  {
+    //val strkafkatopic = args(0)
+    val sparkConf = new SparkConf().setAppName("kafkalab").setMaster("local[*]").set("spark.sql.crossJoin.enabled", "true")
+    //val sparkConf = new SparkConf().setAppName("kafkalab").set("spark.sql.crossJoin.enabled", "true")
+        val sparkcontext = new SparkContext(sparkConf)
+        val sqlContext = new SQLContext(sparkcontext)
+        import sqlContext.implicits._
+        sparkcontext.setLogLevel("ERROR")
+        val ssc = new StreamingContext(sparkcontext, Seconds(10))
+        ssc.checkpoint("file:///tmp/checkpointdir")
+        val kafkaParams = Map[String, Object](
+          "bootstrap.servers" -> "localhost:9092",
+          "key.deserializer" -> classOf[StringDeserializer],
+          "value.deserializer" -> classOf[StringDeserializer],
+          "group.id" -> "kafkatk5",
+          "auto.offset.reset" -> "latest"
+          )
+
+        //val topics = Array(strkafkatopic)
+          val topics = Array("tk4")
+        val stream = KafkaUtils.createDirectStream[String, String](
+          ssc,
+          PreferConsistent,
+          Subscribe[String, String](topics, kafkaParams)
+        )
+
+        val kafkastream = stream.map(record => (record.key, record.value))
+        kafkastream.print()
+        val inputStream = kafkastream.map(rec => rec._2);
+        inputStream.print
+        inputStream.foreachRDD(rdd=>
+    {   
+      val frdd = rdd.filter(_.contains("realTime"))
+        
+      if(!frdd.isEmpty)
+      {
+              frdd.foreach(println)
+              val df = sqlContext.read.json(frdd) 
+              df.show
+              val df1 = df.select(explode($"realTime"))
+              val dfmaster = df1.select("col.assetID","col.gw_SNO")
+              val df2 = df1.select(explode($"col.param"))
+              val dftrans = df2.select($"col.TS",$"col.name",$"col.val",$"col.sts")
+              val rdd1 = dfmaster.join(dftrans).rdd        
+              val rdd2 = rdd1.map(x => dthrealtime(Option(x.getAs("assetID")).getOrElse(""),Option(x.getAs("gw_SNO")).getOrElse(""),Option(x.getAs("TS")).getOrElse(""),Option(x.getAs("name")).getOrElse(""),Option(x.getAs("value")).getOrElse(""),Option(x.getAs("sts")).getOrElse("")))
+              rdd2.saveToCassandra("demo2", "dthrealtime")
+              println("Data inserted into Cassandra database..")   
+      }
+      val geordd = rdd.filter(_.contains("geo"))
+         
+      if(!geordd.isEmpty)
+      {
+              geordd.foreach(println)
+              val df = sqlContext.read.json(geordd) 
+              df.show
+              val df1 = df.select(explode($"geo"))
+              val dfmaster = df1.select("col.assetID","col.gw_SNO")
+              val df2 = df1.select(explode($"col.param"))
+              val dftrans = df2.select($"col.TS",$"col.name",$"col.val",$"col.sts")
+              val rdd1 = dfmaster.join(dftrans).rdd        
+              val rdd2 = rdd1.map(x => dthrealtime(Option(x.getAs("assetID")).getOrElse(""),Option(x.getAs("gw_SNO")).getOrElse(""),Option(x.getAs("TS")).getOrElse(""),Option(x.getAs("name")).getOrElse(""),Option(x.getAs("val")).getOrElse(""),Option(x.getAs("sts")).getOrElse("")))
+              //rdd2.foreach(println)
+              val rdd3 = rdd2.filter(x =>x.value.split(",",-1).length >=10)
+              //rdd3.foreach(println)
+              val rdd4 = rdd3.map(x => (x.assetID,x.gw_SNO,x.TS,x.name,x.value.split(",",-1),x.sts))
+              //rdd4.foreach(println)
+              val rdd5 = rdd4.map(x => dthgeo(x._1,x._2,x._3,x._4,x._5(0),x._5(1),x._5(2),x._5(3),x._5(4),x._5(5),x._5(6),x._5(7),x._5(8),x._5(9),x._6))
+              rdd5.foreach(println)
+              rdd2.saveToCassandra("demo2", "dthrealtime")
+              println("Data inserted into Cassandra database..")   
+      }
+    })    
+    ssc.start()
+    ssc.awaitTermination()
+  }    
+ }
