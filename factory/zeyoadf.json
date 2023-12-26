@@ -1,0 +1,9 @@
+{
+	"name": "zeyoadf",
+	"location": "centralindia",
+	"identity": {
+		"type": "SystemAssigned",
+		"principalId": "307fea50-9168-4ce7-88f8-6907accbd408",
+		"tenantId": "0b7d2613-2a2e-4a10-b3b5-2b9fd01fac78"
+	}
+}
